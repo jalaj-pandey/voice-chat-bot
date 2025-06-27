@@ -1,0 +1,63 @@
+.voice-wrapper {
+  margin-top: 20px;
+  padding: 20px;
+  background: #f9f9f9;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  font-family: 'Segoe UI', sans-serif;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.voice-controls {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.voice-button,
+.voice-stop-btn {
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
+}
+
+.voice-button {
+  background-color: #28a745;
+  color: white;
+}
+
+.voice-button.listening {
+  background-color: #dc3545;
+}
+
+.voice-stop-btn {
+  background-color: #6c757d;
+  color: white;
+}
+
+.voice-chat-log {
+  max-height: 300px;
+  overflow-y: auto;
+  background: white;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #ddd;
+}
+
+.voice-chat-log p {
+  margin: 5px 0;
+  color: #333;
+}
+
+.voice-chat-log hr {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 10px 0;
+}

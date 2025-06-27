@@ -1,0 +1,7 @@
+.env
+client/node_modules
+server/node_modules
+__pycache__
+server/build
+.venv
+server/server.egg-info
