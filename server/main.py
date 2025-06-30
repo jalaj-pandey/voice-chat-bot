@@ -6,7 +6,7 @@ import re
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 import google.generativeai as genai
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -43,6 +43,17 @@ chat_history = []
 #     "contact_phone": None
 # }
 booking_state = {}
+BOOKING_STATE_FILE = "booking_state.json"
+
+def load_booking_state():
+    if os.path.exists(BOOKING_STATE_FILE):
+        with open(BOOKING_STATE_FILE, "r") as f:
+            return json.load(f)
+    return {}
+
+def save_booking_state(state):
+    with open(BOOKING_STATE_FILE, "w") as f:
+        json.dump(state, f, indent=2)
 
 app.add_middleware(
     CORSMiddleware,
@@ -63,6 +74,8 @@ async def chat_with_customer(user_query: UserQuery):
             status_code=400
         )
 
+    booking_state = load_booking_state()
+    msg_lower = user_query.message.lower()
     hotel = next(
         (h for h in hotels_list if h["hotel_name"].lower() == user_query.hotel_name.lower()), None
     )
@@ -72,48 +85,18 @@ async def chat_with_customer(user_query: UserQuery):
             status_code=404
         )
 
+    booking_state["hotel_name"] = hotel["hotel_name"]
     room_types = available_rooms.get(hotel["id"], [])
     available_rooms_str = ", ".join(room_types)
 
     chat_history.append({"user": user_query.message, "bot": ""})
 
-    date_matches = re.findall(
-        r'(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)(?:\s+(\d{4}))?',
-        user_query.message,
-        flags=re.IGNORECASE
-    )
+    extract_name_and_phone(user_query.message, booking_state)
+    extract_guest_info(msg_lower, booking_state)
+    extract_room_type(msg_lower, room_types, booking_state)
+    extract_dates(user_query.message, booking_state)
 
-    valid_dates = []
-    for day_str, month_str, year_str in date_matches:
-        try:
-            day = int(day_str)
-            month = datetime.strptime(month_str, "%B").month
-            year = int(year_str) if year_str else datetime.now().year
-
-            date_obj = datetime(year, month, day)
-            if date_obj.date() <= datetime.now().date():
-                date_obj = datetime(year + 1, month, day)
-
-            valid_dates.append(date_obj.strftime("%d %B %Y") if year_str else date_obj.strftime("%d %B"))
-        except ValueError:
-            continue
-
-    if len(valid_dates) >= 2:
-        booking_state["check_in_date"] = valid_dates[0]
-        booking_state["check_out_date"] = valid_dates[1]
-    elif len(valid_dates) == 1:
-        check_in = datetime.strptime(valid_dates[0], "%d %B")
-        check_out = check_in + timedelta(days=2)
-        booking_state["check_in_date"] = valid_dates[0]
-        booking_state["check_out_date"] = check_out.strftime("%d %B")
-
-    msg_lower = user_query.message.lower()
-    if "2 persons" in msg_lower or "2 guests" in msg_lower:
-        booking_state["guests"] = "2"
-    if "cottage" in msg_lower:
-        booking_state["room_type"] = "Standard Cottage"
-    if "valley" in msg_lower:
-        booking_state["room_type"] = "Valley View Room"
+    save_booking_state(booking_state)
 
     full_prompt = get_prompt(
         hotel,
@@ -125,14 +108,106 @@ async def chat_with_customer(user_query: UserQuery):
 
     try:
         response = await get_completion(full_prompt)
-
         cleaned_response = re.sub(r'^["“”\']?Receptionist:\s*', '', response.strip(), flags=re.IGNORECASE)
-
         chat_history[-1]["bot"] = cleaned_response
         return JSONResponse(content={"response": cleaned_response}, status_code=200)
-
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+def extract_dates(message: str, booking_state: dict):
+    now = datetime.now()
+    range_match = re.search(
+        r'(\d{1,2})(?:st|nd|rd|th)?\s*(?:to|-)\s*(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)(?:\s+(\d{4}))?',
+        message,
+        flags=re.IGNORECASE
+    )
+    if range_match:
+        day1, day2, month_str, year_str = range_match.groups()
+        year = int(year_str) if year_str else now.year
+        try:
+            check_in = datetime(year, datetime.strptime(month_str, "%B").month, int(day1))
+            check_out = datetime(year, datetime.strptime(month_str, "%B").month, int(day2))
+            if check_out <= check_in:
+                check_out += timedelta(days=2)
+            booking_state["check_in_date"] = check_in.strftime("%d %B")
+            booking_state["check_out_date"] = check_out.strftime("%d %B")
+        except Exception:
+            return
+    else:
+        matches = re.findall(
+            r'(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)(?:\s+(\d{4}))?',
+            message,
+            flags=re.IGNORECASE
+        )
+        valid_dates = []
+        for day_str, month_str, year_str in matches:
+            try:
+                day = int(day_str)
+                month = datetime.strptime(month_str, "%B").month
+                year = int(year_str) if year_str else now.year
+                date_obj = datetime(year, month, day)
+                if date_obj.date() <= now.date():
+                    date_obj = datetime(year + 1, month, day)
+                valid_dates.append(date_obj)
+            except ValueError:
+                continue
+
+        if len(valid_dates) >= 2:
+            booking_state["check_in_date"] = valid_dates[0].strftime("%d %B")
+            booking_state["check_out_date"] = valid_dates[1].strftime("%d %B")
+        elif len(valid_dates) == 1:
+            check_in = valid_dates[0]
+            booking_state["check_in_date"] = check_in.strftime("%d %B")
+            booking_state["check_out_date"] = (check_in + timedelta(days=2)).strftime("%d %B")
+
+def extract_guest_info(msg: str, booking_state: dict):
+    adults = re.search(r'(\d+)\s*adults?', msg)
+    children = re.search(r'(\d+)\s*(?:children|child)', msg)
+    guests = []
+
+    if adults:
+        guests.append(f"{adults.group(1)} adults")
+    if children:
+        guests.append(f"{children.group(1)} children")
+    if guests:
+        booking_state["guests"] = " and ".join(guests)
+        return
+
+    guests_generic = re.search(r'(\d+)\s*(guests|persons|people)', msg)
+    if guests_generic:
+        booking_state["guests"] = guests_generic.group(1)
+    elif "2 persons" in msg or "2 guests" in msg:
+        booking_state["guests"] = "2"
+
+def extract_room_type(msg: str, room_types: list, booking_state: dict):
+    for rt in room_types:
+        if rt.lower() in msg:
+            booking_state["room_type"] = rt
+            return
+    keyword_to_room = {
+        "balcony": "Balcony Suite",
+        "deluxe": "Deluxe Twin Room",
+        "cottage": "Standard Cottage",
+        "valley": "Valley View Room"
+    }
+    for keyword, rt in keyword_to_room.items():
+        if keyword in msg:
+            booking_state["room_type"] = rt
+            return
+
+def extract_name_and_phone(message: str, booking_state: dict):
+    name_match = re.search(r"(?:my name is|i am|this is)\s+([A-Za-z ]+)", message, re.IGNORECASE)
+    if name_match:
+        booking_state["name"] = name_match.group(1).strip()
+    else:
+        alt_name_match = re.match(r"^([A-Za-z ]+)[, ]+\+?\d{10,13}", message.strip())
+        if alt_name_match:
+            booking_state["name"] = alt_name_match.group(1).strip()
+
+    phone_match = re.search(r"(\+?\d{10,13})", message)
+    if phone_match:
+        booking_state["contact_no"] = phone_match.group(1).strip()
+
 
 
 async def get_completion(prompt: str):
@@ -186,15 +261,3 @@ async def voice_chat(req: VoiceRequest):
 
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
-
-# @app.websocket("/ws")
-# async def websocket_endpoint(websocket: WebSocket):
-#     await websocket.accept()
-#     try:
-#         while True:
-#             data = await websocket.receive_text()
-#             user_query = UserQuery(hotel_name="Default Hotel", message=data) 
-#             response = await chat_with_customer(user_query)
-#             await websocket.send_text(response.body.decode())
-#     except WebSocketDisconnect:
-#         print("Client disconnected")
