@@ -10,7 +10,7 @@
   margin-bottom: 30px;
   font-size: 2rem;
   font-weight: 600;
-  color: #333;
+  color: #c0b9b9;
 }
 
 .grid {
@@ -47,6 +47,15 @@
   width: 100%;
   font-weight: 500;
   transition: background-color 0.2s ease;
+}
+
+.typing-dots::after {
+  content: " ...";
+  animation: blink 1s infinite step-end;
+}
+@keyframes blink {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
 }
 
 .chat-btn:hover {

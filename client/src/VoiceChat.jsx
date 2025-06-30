@@ -1,15 +1,16 @@
-import React, { useEffect, useState, useRef, forwardRef,
-  useImperativeHandle, } from "react";
+import React, {
+  useState,
+  useRef,
+  forwardRef,
+  useImperativeHandle,
+} from "react";
 import axios from "axios";
 import "./styles/VoiceChat.css";
 
 const VoiceChat = forwardRef(({ selectedHotel, onVoiceMessage, style, className }, ref) => {
   const [listening, setListening] = useState(false);
-  const [responseText, setResponseText] = useState("");
-  const [chat, setChat] = useState([]);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
-
 
   useImperativeHandle(ref, () => ({
     toggleRecording: () => {
@@ -44,11 +45,15 @@ const VoiceChat = forwardRef(({ selectedHotel, onVoiceMessage, style, className 
         const userMessage = res.data.transcript;
 
         if (onVoiceMessage) {
-          onVoiceMessage(userMessage, botReply);
+          onVoiceMessage(userMessage, null);
         }
 
-        setChat((prev) => [...prev, { user: userMessage, bot: botReply }]);
-        speak(botReply);
+        setTimeout(() => {
+          if (onVoiceMessage) {
+            onVoiceMessage(null, botReply);
+          }
+          speak(botReply);
+        },10);
       };
 
       mediaRecorderRef.current.start();
@@ -83,30 +88,18 @@ const VoiceChat = forwardRef(({ selectedHotel, onVoiceMessage, style, className 
     window.speechSynthesis.speak(utterance);
   };
 
-
   return (
-  <div className={`voice-wrapper ${className || ''}`} style={style} ref={ref}>
-    <div className="voice-controls">
-      <button
-        onClick={listening ? stopRecording : startRecording}
-        className={`voice-button ${listening ? "listening" : ""}`}
-      >
-        {listening ? "🛑 Stop Recording" : "🎙️ Start Voice Chat"}
-      </button>
-
-      {/* <div className="voice-chat-log">
-        {chat.map((entry, i) => (
-          <div key={i}>
-            <p><strong>You:</strong> {entry.user}</p>
-            <p><strong>Receptionist:</strong> {entry.bot}</p>
-            <hr />
-          </div>
-        ))}
-      </div> */}
+    <div className={`voice-wrapper ${className || ''}`} style={style}>
+      <div className="voice-controls">
+        <button
+          onClick={listening ? stopRecording : startRecording}
+          className={`voice-button ${listening ? "listening" : ""}`}
+        >
+          {listening ? "🛑 Stop Recording" : "🎙️ Start Voice Chat"}
+        </button>
+      </div>
     </div>
-  </div>
-  )
-  return null;
+  );
 });
 
 export default VoiceChat;

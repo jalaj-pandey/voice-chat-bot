@@ -8,10 +8,9 @@ const ChatBot = () => {
   const [selectedHotel, setSelectedHotel] = useState(null);
   const [messages, setMessages] = useState([]);
   const [userMsg, setUserMsg] = useState("");
-  const [showVoiceChat, setShowVoiceChat] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
 
-  const voiceRef = useRef(null)
+  const voiceRef = useRef(null);
 
   useEffect(() => {
     axios
@@ -23,27 +22,40 @@ const ChatBot = () => {
   const sendMessage = async () => {
     if (!userMsg.trim()) return;
 
-    const newMessages = [...messages, { sender: "You", text: userMsg }];
-    setMessages(newMessages);
+    const messageToSend = userMsg;
+    setUserMsg("");
+
+    setMessages((prev) => [...prev, { sender: "You", text: messageToSend }]);
+    setMessages((prev) => [...prev, { sender: "bot", text: "Receptionist is typing...", typing: true }]);
 
     try {
       const res = await axios.post("http://127.0.0.1:8000/chat", {
         hotel_name: selectedHotel.hotel_name,
-        message: userMsg,
+        message: messageToSend,
       });
 
-      setMessages([
-        ...newMessages,
-        { sender: "Receptionist", text: res.data.response },
+      const botReply = res.data.response;
+
+      setMessages((prev) => [
+        ...prev.filter((msg) => !msg.typing),
+        { sender: "Receptionist", text: botReply },
       ]);
-      setUserMsg("");
+      speak(botReply);
+
     } catch (err) {
-      console.error(err);
-      setMessages([
-        ...newMessages,
-        { sender: "Receptionist", text: "Oops! Something went wrong." },
+      const errorReply = "Oops! Something went wrong.";
+      setMessages((prev) => [
+        ...prev.filter((msg) => !msg.typing),
+        { sender: "Receptionist", text: errorReply },
       ]);
+      speak(errorReply);
     }
+  };
+
+  const speak = (text) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    window.speechSynthesis.speak(utterance);
   };
 
   if (!selectedHotel) {
@@ -76,14 +88,22 @@ const ChatBot = () => {
     );
   }
 
-  const handleVoiceMessage = (transcript, botResponse) => {
-    const newMessages = [
-      ...messages,
-      { sender: "You", text: transcript },
-      { sender: "Receptionist", text: botResponse },
-    ];
-    setMessages(newMessages);
-  };
+ const handleVoiceMessage = (userText, botTextOrTyping) => {
+  if (userText) {
+    setMessages(prev => [
+      ...prev,
+      { sender: "You", text: userText },
+      { sender: "Receptionist", text: "Receptionist is typing...", typing: true }
+    ]);
+    return;
+  }
+  if (botTextOrTyping && botTextOrTyping !== "__typing__") {
+    setMessages(prev => [
+      ...prev.filter(m => !m.typing),
+      { sender: "Receptionist", text: botTextOrTyping }
+    ]);
+  }
+};
 
   const toggleRecording = () => {
     if (voiceRef.current) {
@@ -104,17 +124,10 @@ const ChatBot = () => {
               key={i}
               className={`message ${msg.sender === "You" ? "user" : "bot"}`}
             >
-              <strong>{msg.sender}:</strong> {msg.text}
+              <strong>{msg.sender}:</strong>{" "}
+              {msg.typing ? <i className="typing-dots">...</i> : msg.text}
             </div>
           ))}
-
-          {showVoiceChat && (
-            <VoiceChat
-              selectedHotel={selectedHotel.hotel_name}
-              onVoiceMessage={handleVoiceMessage}
-            />
-          )}
-          
         </div>
         <div className="input-area">
           <input
@@ -132,8 +145,7 @@ const ChatBot = () => {
           </button>
         </div>
       </div>
-
-       <VoiceChat
+      <VoiceChat
         ref={voiceRef}
         selectedHotel={selectedHotel.hotel_name}
         onVoiceMessage={handleVoiceMessage}
