@@ -9,6 +9,7 @@ const ChatBot = () => {
   const [messages, setMessages] = useState([]);
   const [userMsg, setUserMsg] = useState("");
   const [isRecording, setIsRecording] = useState(false);
+  const messagesEndRef = useRef(null);
 
   const voiceRef = useRef(null);
 
@@ -19,6 +20,12 @@ const ChatBot = () => {
       .catch((err) => console.error("Error fetching hotels:", err));
   }, []);
 
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [messages]);
+  
   const sendMessage = async () => {
     if (!userMsg.trim()) return;
 
@@ -128,6 +135,7 @@ const ChatBot = () => {
               {msg.typing ? <i className="typing-dots">...</i> : msg.text}
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
         <div className="input-area">
           <input

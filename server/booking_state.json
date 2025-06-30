@@ -1,9 +1,9 @@
 {
-  "hotel_name": "Himalayan Heights Resort",
-  "guests": "2 adults and 3 children",
+  "hotel_name": "Cloud Valley Inn",
+  "guests": "2 adults and 2 children",
   "check_in_date": "15 July",
-  "check_out_date": "20 July",
-  "room_type": "Lake View Suite",
-  "name": "Jalaj",
-  "contact_no": "9876541230"
+  "check_out_date": "23 July",
+  "room_type": "Deluxe Twin Room",
+  "name": "Jalaj Pandey",
+  "contact_no": "9876543210"
 }
